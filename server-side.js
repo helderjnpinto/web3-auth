@@ -27,7 +27,12 @@ module.exports.attach = function (app, secret) {
     secret: secret,
     credentialsRequired: false,
     getToken: function fromHeaderOrQuerystring(req) {
-      return req.cookies.token;
+      if (req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
+        return req.headers.authorization.split(' ')[1];
+      } else if (req.query && req.query.token) {
+        return req.query.token;
+      }
+      return null;
     }
   }).unless({
     path: ['/sign-in']
@@ -35,15 +40,12 @@ module.exports.attach = function (app, secret) {
 
   app.post('/sign-in', function (req, res) {
     console.log(req.body);
-
     var baseUrl = req.protocol + "://" + req.hostname;
-
     var msgParams = {
-      data: ethUtil.bufferToHex(new Buffer("Sign into " + baseUrl, 'utf8')),
+      data: ethUtil.bufferToHex(Buffer.from("Sign into " + baseUrl, 'utf8')),
       sig: req.body.signed,
     };
     var recovered = sigUtil.recoverPersonalSignature(msgParams)
-
     if (recovered === req.body.account) {
       console.log('SigUtil Successfully verified signer as ' + req.body.account);
 
@@ -51,13 +53,13 @@ module.exports.attach = function (app, secret) {
         loggedInAs: req.body.account
       }, secret);
 
-      console.log('JWT token: ' + token);
-      res.cookie('token', token, {
-        domain: 'localhost',
-        httpOnly: true
-      });
-      res.end();
+      res.json({
+        token
+      })
     } else {
+      res.json({
+        token: 'error'
+      })
       console.log('SigUtil unable to recover the message signer');
     }
   });
